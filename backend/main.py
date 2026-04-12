@@ -22,6 +22,8 @@ from consumer import start_consumer_threads, websocket_clients, set_ws_loop
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [API] %(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
+ENABLE_KAFKA = os.getenv("ENABLE_KAFKA", "true").lower() in ("1", "true", "yes")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,11 +32,14 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     import asyncio
     set_ws_loop(asyncio.get_event_loop())
-    logger.info("Starting Kafka consumer threads...")
-    try:
-        start_consumer_threads()
-    except Exception as e:
-        logger.warning(f"Could not start Kafka consumer: {e}")
+    if ENABLE_KAFKA:
+        logger.info("Starting Kafka consumer threads...")
+        try:
+            start_consumer_threads()
+        except Exception as e:
+            logger.warning(f"Could not start Kafka consumer: {e}")
+    else:
+        logger.info("Kafka consumer disabled (ENABLE_KAFKA=false) — API + DB only, suitable for Render/Vercel without broker.")
     yield
     logger.info("Shutting down...")
 

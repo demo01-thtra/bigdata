@@ -50,6 +50,10 @@ trong luồng dữ liệu streaming.
 
 > **Repo Git:** File CSV không được commit (quá lớn). Xem `data/README.md` để tải dữ liệu và copy `.env.example` → `.env`.
 
+## Deploy (Vercel + Render)
+
+Xem **[DEPLOY.md](./DEPLOY.md)** — frontend lên **Vercel** (`frontend/`), API + Postgres lên **Render** (`render.yaml` + `backend/Dockerfile`). Pipeline Kafka đầy đủ thường chỉ chạy local/Docker; trên cloud cần broker riêng (xem DEPLOY.md).
+
 ## Prerequisites
 
 - Docker Desktop (>= 4.0)

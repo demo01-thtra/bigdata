@@ -1,0 +1,26 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Sau khi push lên GitHub: Render Dashboard → New → Blueprint → chọn repo → áp dụng file này.
+
+databases:
+  - name: fraud-db
+    databaseName: fraud_detection
+    user: fraud_user
+    region: singapore
+    plan: free
+
+services:
+  - type: web
+    name: fraud-backend
+    region: singapore
+    plan: free
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: ENABLE_KAFKA
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fraud-db
+          property: connectionString
