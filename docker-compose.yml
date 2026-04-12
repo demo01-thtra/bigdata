@@ -1,0 +1,140 @@
+services:
+  # ============ KAFKA (KRaft mode - no Zookeeper) ============
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: fraud-kafka
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_NUM_PARTITIONS: 3
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+    healthcheck:
+      test: /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 45s
+    networks:
+      - fraud-network
+
+  # ============ POSTGRESQL ============
+  postgres:
+    image: postgres:16-alpine
+    container_name: fraud-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-fraud_detection}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: pg_isready -U postgres
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - fraud-network
+
+  # ============ KAFKA PRODUCER ============
+  producer:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile
+    container_name: fraud-producer
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC=transactions
+      - DATA_PATH=/app/data/paysim.csv
+      - SEND_INTERVAL=${SEND_INTERVAL:-0.5}
+      - MAX_ROWS=${MAX_ROWS:-5000}
+    volumes:
+      - ./data:/app/data:ro
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: on-failure
+    networks:
+      - fraud-network
+
+  # ============ SPARK STREAMING ============
+  streaming:
+    build:
+      context: ./streaming
+      dockerfile: Dockerfile
+    container_name: fraud-streaming
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - INPUT_TOPIC=transactions
+      - OUTPUT_TOPIC=processed_transactions
+      - ALERT_TOPIC=fraud_alerts
+      - MODEL_PATH=/app/model/fraud_model.pkl
+      - CONFIG_PATH=/app/model/feature_config.json
+      - PYSPARK_PYTHON=python3
+      - PYSPARK_DRIVER_PYTHON=python3
+    volumes:
+      - ./model:/app/model:ro
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: on-failure
+    networks:
+      - fraud-network
+
+  # ============ FASTAPI BACKEND ============
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fraud-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/fraud_detection
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - PROCESSED_TOPIC=processed_transactions
+      - ALERT_TOPIC=fraud_alerts
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: on-failure
+    networks:
+      - fraud-network
+
+  # ============ NEXT.JS FRONTEND ============
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: fraud-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws/alerts
+    depends_on:
+      - backend
+    restart: on-failure
+    networks:
+      - fraud-network
+
+volumes:
+  postgres_data:
+
+networks:
+  fraud-network:
+    driver: bridge
