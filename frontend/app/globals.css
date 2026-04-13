@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  scroll-behavior: smooth;
+}
+
 :root {
   --bg-primary: #0f172a;
   --bg-secondary: #1e293b;
@@ -34,4 +38,22 @@ body {
   .badge-safe {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-500/20 text-green-400;
   }
+}
+
+/* Bauhaus utilities — scoped to intro page */
+.bauhaus-dot-grid {
+  background-image: radial-gradient(#121212 1.5px, transparent 1.5px);
+  background-size: 20px 20px;
+}
+
+.bauhaus-triangle {
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+}
+
+.bauhaus-btn-press {
+  transition: transform 200ms ease-out, box-shadow 200ms ease-out;
+}
+.bauhaus-btn-press:active {
+  transform: translate(2px, 2px);
+  box-shadow: none !important;
 }

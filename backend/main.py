@@ -179,9 +179,16 @@ def get_timeline_stats(
 ):
     """Get fraud timeline data for charts."""
     since = datetime.utcnow() - timedelta(hours=hours)
+
+    from database import _is_sqlite
+    if _is_sqlite:
+        hour_col = func.strftime('%Y-%m-%dT%H:00:00', Transaction.created_at).label('hour')
+    else:
+        hour_col = func.date_trunc('hour', Transaction.created_at).label('hour')
+
     results = (
         db.query(
-            func.date_trunc('hour', Transaction.created_at).label('hour'),
+            hour_col,
             func.count(Transaction.id).label('total'),
             func.sum(func.cast(Transaction.is_fraud, Integer)).label('frauds'),
         )
@@ -193,7 +200,7 @@ def get_timeline_stats(
 
     return [
         TimelinePoint(
-            timestamp=r.hour.isoformat() if r.hour else '',
+            timestamp=r.hour.isoformat() if hasattr(r.hour, 'isoformat') else (r.hour or ''),
             total=r.total or 0,
             frauds=int(r.frauds or 0),
         )

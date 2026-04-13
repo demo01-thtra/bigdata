@@ -1,8 +1,13 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Outfit } from 'next/font/google';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });
+const outfit = Outfit({
+  subsets: ['latin'],
+  weight: ['400', '500', '700', '900'],
+  variable: '--font-outfit',
+});
 
 export const metadata: Metadata = {
   title: 'Fraud Detection Dashboard',
@@ -16,22 +21,29 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.className} min-h-screen bg-slate-900`}>
-        <nav className="sticky top-0 z-50 border-b border-slate-700 bg-slate-900/80 backdrop-blur-sm">
+      <body className={`${inter.className} ${outfit.variable} min-h-screen bg-slate-900`}>
+        <nav className="sticky top-0 z-50 border-b-4 border-[#121212] bg-[#121212]">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex h-16 items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                  </svg>
+              <a href="/" className="flex items-center gap-3 group">
+                {/* Bauhaus geometric logo — circle, square, triangle */}
+                <div className="flex items-center gap-1">
+                  <div className="h-5 w-5 rounded-full bg-[#D02020]" />
+                  <div className="h-5 w-5 rounded-none bg-[#1040C0]" />
+                  <div
+                    className="h-5 w-5 bg-[#F0C020]"
+                    style={{ clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)' }}
+                  />
                 </div>
-                <h1 className="text-xl font-bold text-white">Fraud Detection</h1>
-              </div>
+                <span className="text-lg font-bold uppercase tracking-wider text-white">
+                  Fraud Detection
+                </span>
+              </a>
               <div className="flex items-center gap-6">
-                <a href="/dashboard" className="text-sm text-slate-300 hover:text-white transition-colors">Dashboard</a>
-                <a href="/transactions" className="text-sm text-slate-300 hover:text-white transition-colors">Transactions</a>
-                <a href="/alerts" className="text-sm text-slate-300 hover:text-white transition-colors">Alerts</a>
+                <a href="/" className="text-sm font-bold uppercase tracking-wider text-slate-300 hover:text-[#F0C020] transition-colors duration-200">Intro</a>
+                <a href="/dashboard" className="text-sm font-bold uppercase tracking-wider text-slate-300 hover:text-[#F0C020] transition-colors duration-200">Dashboard</a>
+                <a href="/transactions" className="text-sm font-bold uppercase tracking-wider text-slate-300 hover:text-[#F0C020] transition-colors duration-200">Transactions</a>
+                <a href="/alerts" className="text-sm font-bold uppercase tracking-wider text-slate-300 hover:text-[#F0C020] transition-colors duration-200">Alerts</a>
               </div>
             </div>
           </div>
