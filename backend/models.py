@@ -20,8 +20,11 @@ class Transaction(Base):
     name_dest = Column(String(50))
     old_balance_dest = Column(Float, default=0)
     new_balance_dest = Column(Float, default=0)
+    device_id = Column(String(50), default='')
+    ip_address = Column(String(50), default='')
     is_fraud = Column(Boolean, default=False, index=True)
     fraud_probability = Column(Float, default=0.0)
+    risk_score = Column(Float, default=0.0)
     detection_method = Column(String(20), default='none')
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 

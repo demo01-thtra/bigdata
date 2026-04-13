@@ -1,0 +1,3 @@
+Dataset,Rows,Features,Fraud Count,Fraud Rate (%),Feature Type,Used For
+PaySim,6362620,11,8213,0.1291,Real (interpretable),Training + Streaming
+Credit Card,284807,31,492,0.1727,PCA (anonymized),EDA comparison only

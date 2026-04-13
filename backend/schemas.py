@@ -15,8 +15,11 @@ class TransactionResponse(BaseModel):
     new_balance_orig: float = 0
     old_balance_dest: float = 0
     new_balance_dest: float = 0
+    device_id: Optional[str] = ''
+    ip_address: Optional[str] = ''
     is_fraud: bool = False
     fraud_probability: float = 0.0
+    risk_score: float = 0.0
     detection_method: str = "none"
     created_at: datetime
 

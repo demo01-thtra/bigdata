@@ -9,34 +9,36 @@ trong luồng dữ liệu streaming.
 ## Architecture
 
 ```
-┌─────────────┐    ┌───────────┐    ┌──────────────┐    ┌──────────┐    ┌──────────┐
-│  PaySim CSV │───>│   Kafka   │───>│  Streaming   │───>│  Kafka   │───>│ FastAPI  │
-│  (Producer) │    │ (topic:   │    │  (Python:     │    │ (output  │    │ Backend  │
-│             │    │  txns)    │    │   ML+Rules)   │    │  topics) │    │          │
-└─────────────┘    └───────────┘    └──────────────┘    └──────────┘    └────┬─────┘
-                                                                           │
-                                                                      ┌────▼─────┐
-                                                                      │PostgreSQL│
-                                                                      └────┬─────┘
-                                                                           │
-                                                                      ┌────▼─────┐
-                                                                      │ Next.js  │
-                                                                      │ Dashboard│
-                                                                      └──────────┘
+┌─────────────┐    ┌───────────┐    ┌──────────────────┐    ┌──────────┐    ┌──────────┐
+│  PaySim CSV │───>│   Kafka   │───>│ PySpark Struct.  │───>│  Kafka   │───>│ FastAPI  │
+│  (Producer) │    │ (topic:   │    │  Streaming       │    │ (output  │    │ Backend  │
+│  +device/IP │    │  txns)    │    │  (ML + Rules)    │    │  topics) │    │  + SSE   │
+└─────────────┘    └───────────┘    └──────────────────┘    └──────────┘    └────┬─────┘
+                                                                                │
+                                                                           ┌────▼─────┐
+                                                                           │PostgreSQL│
+                                                                           └────┬─────┘
+                                                                                │
+                                                                           ┌────▼─────┐
+                                                                           │ Next.js  │
+                                                                           │ Dashboard│
+                                                                           │  (SSE)   │
+                                                                           └──────────┘
 ```
 
 ## Tech Stack
 
-| Component        | Technology                          |
-|-----------------|-------------------------------------|
-| Data Streaming  | Apache Kafka (KRaft mode)           |
-| Stream Processing| Python (Kafka consumer) + ML + rules |
-| ML Training     | scikit-learn, pandas, numpy         |
-| Backend API     | FastAPI + SQLAlchemy                |
-| Database        | PostgreSQL 16                       |
-| Frontend        | Next.js 14 (App Router) + Tailwind  |
-| Real-time UI    | WebSocket                           |
-| Containerization| Docker + Docker Compose             |
+| Component        | Technology                                  |
+|-----------------|---------------------------------------------|
+| Data Streaming  | Apache Kafka (KRaft mode)                   |
+| Stream Processing| **PySpark Structured Streaming** + ML + Rules |
+| ML Training     | scikit-learn, pandas, numpy                 |
+| Backend API     | FastAPI + SQLAlchemy                        |
+| Database        | PostgreSQL 16                               |
+| Frontend        | Next.js 14 (App Router) + Tailwind          |
+| Real-time UI    | **SSE (Server-Sent Events)**                |
+| Testing         | pytest + GitHub Actions CI                  |
+| Containerization| Docker + Docker Compose                     |
 
 ## Dataset
 
@@ -144,6 +146,13 @@ fraud-detection/
 │   └── Dockerfile
 ├── docker/
 │   └── init.sql                 # Database initialization
+├── tests/
+│   ├── test_features.py         # Unit tests — feature engineering
+│   ├── test_rules.py            # Unit tests — rule detection
+│   ├── test_api.py              # Unit tests — API endpoints
+│   └── requirements.txt
+├── .github/
+│   └── workflows/ci.yml         # GitHub Actions CI (lint + test)
 ├── docker-compose.yml           # Docker orchestration
 ├── .env.example                 # Mẫu biến môi trường (copy thành .env)
 ├── rule.md                      # Project specification
@@ -161,7 +170,8 @@ fraud-detection/
 | GET    | /api/stats             | Dashboard statistics           |
 | GET    | /api/stats/timeline    | Fraud over time (for charts)   |
 | GET    | /api/stats/by-type     | Fraud breakdown by type        |
-| WS     | /ws/alerts             | Real-time fraud alert stream   |
+| GET    | /api/sse/alerts        | **SSE** — real-time fraud alerts |
+| WS     | /ws/alerts             | WebSocket (backward compat)    |
 
 ## Detection Strategy
 
@@ -177,15 +187,20 @@ fraud-detection/
 - Amount > 80% of sender's balance (TRANSFER/CASH_OUT)
 - Balance error != 0 (TRANSFER/CASH_OUT)
 - Account completely drained with amount > $10,000 (TRANSFER/CASH_OUT)
+- **Đăng nhập lạ:** device_id bắt đầu bằng `UNKNOWN-` (thiết bị mới / bất thường)
+- **IP đáng ngờ:** ip_address thuộc dải `10.x.x.x`
+- **Chuyển tiền liên tục:** ≥ 3 giao dịch cùng user trong 1 micro-batch (Window partitionBy)
 
-### 3. Combined
+### 3. Combined — Risk Score
+- `risk_score = 0.4 × rule_score + 0.6 × model_probability`
 - Final decision: `fraud = ML_prediction OR rule_based_flag`
 - Detection method tracked: 'ml', 'rule', 'both', 'none'
 
 ## Monitoring
 
 - Frontend dashboard auto-refreshes every 5 seconds
-- WebSocket provides instant fraud alerts
+- **SSE (Server-Sent Events)** provides instant fraud alerts (WebSocket kept for backward compat)
+- PySpark Structured Streaming with checkpoint for fault tolerance
 - Streaming service logs detected frauds (`docker-compose logs -f streaming`)
 - Producer logs streaming progress
 

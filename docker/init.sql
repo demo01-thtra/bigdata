@@ -8,8 +8,11 @@ CREATE TABLE IF NOT EXISTS transactions (
     name_dest VARCHAR(50),
     old_balance_dest DECIMAL(15,2) DEFAULT 0,
     new_balance_dest DECIMAL(15,2) DEFAULT 0,
+    device_id VARCHAR(50) DEFAULT '',
+    ip_address VARCHAR(50) DEFAULT '',
     is_fraud BOOLEAN DEFAULT FALSE,
     fraud_probability FLOAT DEFAULT 0.0,
+    risk_score FLOAT DEFAULT 0.0,
     detection_method VARCHAR(20) DEFAULT 'none',
     created_at TIMESTAMP DEFAULT NOW()
 );

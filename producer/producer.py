@@ -1,12 +1,16 @@
 """
 Kafka Producer - Simulates real-time transaction streaming from PaySim dataset.
 Reads paysim.csv and sends each row as JSON to Kafka topic 'transactions'.
+Enriches each transaction with simulated device_id and ip_address to support
+detection of unusual login / device anomaly rules.
 """
 import os
 import csv
 import json
 import time
 import uuid
+import random
+import hashlib
 import logging
 from datetime import datetime, timedelta
 from kafka import KafkaProducer
@@ -23,6 +27,45 @@ DATA_PATH = os.getenv('DATA_PATH', '/app/data/paysim.csv')
 SEND_INTERVAL = float(os.getenv('SEND_INTERVAL', '0.5'))
 BATCH_LOG_SIZE = int(os.getenv('BATCH_LOG_SIZE', '100'))
 MAX_ROWS = int(os.getenv('MAX_ROWS', '0'))
+
+# ── Device & IP simulation ─────────────────────────────────────────────
+# Each user gets 1–3 usual devices and 1–2 usual IPs.
+# ~5% of transactions use an UNKNOWN device (= new/suspicious login).
+# ~3% of transactions use a suspicious IP (10.x.x.x range).
+_user_devices: dict[str, list[str]] = {}
+_user_ips: dict[str, list[str]] = {}
+NEW_DEVICE_RATE = 0.05
+SUSPICIOUS_IP_RATE = 0.03
+
+
+def _stable_hash(val: str, n: int) -> int:
+    """Deterministic hash → integer 0..n-1."""
+    return int(hashlib.md5(val.encode()).hexdigest(), 16) % n
+
+
+def _get_device(user_id: str) -> str:
+    """Return a device_id for user_id. Occasionally returns UNKNOWN-*."""
+    if random.random() < NEW_DEVICE_RATE:
+        return f"UNKNOWN-{uuid.uuid4().hex[:8]}"
+    if user_id not in _user_devices:
+        count = random.randint(1, 3)
+        _user_devices[user_id] = [
+            f"DEV-{_stable_hash(user_id + str(i), 99999):05d}" for i in range(count)
+        ]
+    return random.choice(_user_devices[user_id])
+
+
+def _get_ip(user_id: str) -> str:
+    """Return an IP for user_id. Occasionally returns suspicious 10.x.x.x."""
+    if random.random() < SUSPICIOUS_IP_RATE:
+        return f"10.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}"
+    if user_id not in _user_ips:
+        count = random.randint(1, 2)
+        _user_ips[user_id] = [
+            f"192.168.{_stable_hash(user_id + str(i), 255)}.{_stable_hash(user_id + str(i) + 'x', 254) + 1}"
+            for i in range(count)
+        ]
+    return random.choice(_user_ips[user_id])
 
 
 def create_producer() -> KafkaProducer:
@@ -77,6 +120,8 @@ def stream_transactions() -> None:
                 'isFraud': int(row['isFraud']),
                 'isFlaggedFraud': int(row['isFlaggedFraud']),
                 'timestamp': (base_time + timedelta(seconds=sent_count)).isoformat(),
+                'device_id': _get_device(row['nameOrig']),
+                'ip_address': _get_ip(row['nameOrig']),
             }
 
             producer.send(

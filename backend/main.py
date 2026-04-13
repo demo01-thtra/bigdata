@@ -3,6 +3,7 @@ FastAPI Backend for Fraud Detection Dashboard.
 Provides REST APIs and WebSocket for real-time alerts.
 """
 import os
+import json
 import logging
 import math
 from datetime import datetime, timedelta
@@ -17,7 +18,8 @@ from schemas import (
     TransactionResponse, FraudAlertResponse, DashboardStats,
     TimelinePoint, TypeBreakdown, PaginatedResponse
 )
-from consumer import start_consumer_threads, websocket_clients, set_ws_loop
+from consumer import start_consumer_threads, websocket_clients, set_ws_loop, sse_subscribers, _sse_lock
+import asyncio as _asyncio
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [API] %(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -225,7 +227,7 @@ def get_stats_by_type(db: Session = Depends(get_db)):
 
 @app.websocket("/ws/alerts")
 async def websocket_alerts(websocket: WebSocket):
-    """WebSocket endpoint for real-time fraud alerts."""
+    """WebSocket endpoint for real-time fraud alerts (kept for backward compat)."""
     await websocket.accept()
     websocket_clients.append(websocket)
     logger.info(f"WebSocket client connected. Total: {len(websocket_clients)}")
@@ -235,6 +237,40 @@ async def websocket_alerts(websocket: WebSocket):
     except WebSocketDisconnect:
         websocket_clients.remove(websocket)
         logger.info(f"WebSocket client disconnected. Total: {len(websocket_clients)}")
+
+
+@app.get("/api/sse/alerts")
+async def sse_alerts():
+    """SSE endpoint — pushes fraud alerts as Server-Sent Events."""
+    from starlette.responses import StreamingResponse
+
+    queue: _asyncio.Queue = _asyncio.Queue(maxsize=256)
+    with _sse_lock:
+        sse_subscribers.append(queue)
+
+    async def event_generator():
+        try:
+            while True:
+                payload = await queue.get()
+                yield f"data: {json.dumps(payload)}\n\n"
+        except _asyncio.CancelledError:
+            pass
+        finally:
+            with _sse_lock:
+                try:
+                    sse_subscribers.remove(queue)
+                except ValueError:
+                    pass
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 if __name__ == "__main__":

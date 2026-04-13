@@ -28,8 +28,11 @@ interface Transaction {
   new_balance_orig: number;
   old_balance_dest: number;
   new_balance_dest: number;
+  device_id: string;
+  ip_address: string;
   is_fraud: boolean;
   fraud_probability: number;
+  risk_score: number;
   detection_method: string;
   created_at: string;
 }

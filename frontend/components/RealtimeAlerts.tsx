@@ -9,28 +9,33 @@ interface AlertItem {
   detection_method: string;
   reason: string;
   fraud_probability: number;
+  risk_score: number;
+  device_id: string;
+  ip_address: string;
   timestamp: string;
 }
 
 export default function RealtimeAlerts() {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
+  const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws/alerts';
+    const sseUrl =
+      (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') +
+      '/api/sse/alerts';
 
-    function connectWebSocket() {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+    function connectSSE() {
+      const es = new EventSource(sseUrl);
+      esRef.current = es;
 
-      ws.onopen = () => setIsConnected(true);
-      ws.onclose = () => {
+      es.onopen = () => setIsConnected(true);
+      es.onerror = () => {
         setIsConnected(false);
-        setTimeout(connectWebSocket, 3000);
+        es.close();
+        setTimeout(connectSSE, 3000);
       };
-      ws.onerror = () => ws.close();
-      ws.onmessage = (event) => {
+      es.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
           if (message.type === 'fraud_alert') {
@@ -42,8 +47,8 @@ export default function RealtimeAlerts() {
       };
     }
 
-    connectWebSocket();
-    return () => wsRef.current?.close();
+    connectSSE();
+    return () => esRef.current?.close();
   }, []);
 
   return (
@@ -92,7 +97,7 @@ export default function RealtimeAlerts() {
               </p>
             </div>
             <span className="text-xs font-mono text-red-400">
-              {(alert.fraud_probability * 100).toFixed(0)}%
+              Risk: {((alert.risk_score ?? alert.fraud_probability) * 100).toFixed(0)}%
             </span>
           </div>
         ))}

@@ -69,7 +69,7 @@ services:
     networks:
       - fraud-network
 
-  # ============ SPARK STREAMING ============
+  # ============ SPARK STRUCTURED STREAMING ============
   streaming:
     build:
       context: ./streaming
@@ -82,8 +82,11 @@ services:
       - ALERT_TOPIC=fraud_alerts
       - MODEL_PATH=/app/model/fraud_model.pkl
       - CONFIG_PATH=/app/model/feature_config.json
+      - CHECKPOINT_DIR=/tmp/spark-checkpoint
+      - TRIGGER_INTERVAL=5 seconds
       - PYSPARK_PYTHON=python3
       - PYSPARK_DRIVER_PYTHON=python3
+      - JAVA_TOOL_OPTIONS=--add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/jdk.internal.misc=ALL-UNNAMED --add-opens=jdk.unsupported/sun.misc=ALL-UNNAMED
     volumes:
       - ./model:/app/model:ro
     depends_on:

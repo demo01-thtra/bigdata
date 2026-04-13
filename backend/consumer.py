@@ -1,6 +1,6 @@
 """
 Kafka Consumer - Listens to processed transactions and fraud alerts,
-writes them to PostgreSQL, broadcasts fraud alerts via WebSocket.
+writes them to PostgreSQL, broadcasts fraud alerts via SSE and WebSocket.
 """
 import os
 import json
@@ -10,6 +10,7 @@ import logging
 import threading
 import time
 from datetime import datetime
+from collections import deque
 from kafka import KafkaConsumer
 from sqlalchemy.orm import Session
 from database import SessionLocal
@@ -24,17 +25,19 @@ PROCESSED_TOPIC = os.getenv('PROCESSED_TOPIC', 'processed_transactions')
 websocket_clients: list = []
 _ws_loop: asyncio.AbstractEventLoop = None
 
+# SSE support: thread-safe queue of recent alerts for SSE subscribers
+sse_subscribers: list[asyncio.Queue] = []
+_sse_lock = threading.Lock()
+
 
 def set_ws_loop(loop: asyncio.AbstractEventLoop) -> None:
     global _ws_loop
     _ws_loop = loop
 
 
-def _broadcast_alert(data: dict) -> None:
-    """Send fraud alert JSON to all connected WebSocket clients."""
-    if not websocket_clients or _ws_loop is None:
-        return
-    payload = {
+def _build_alert_payload(data: dict) -> dict:
+    """Build standard alert payload for SSE / WebSocket."""
+    return {
         'type': 'fraud_alert',
         'data': {
             'transaction_id': data.get('transaction_id', ''),
@@ -43,16 +46,35 @@ def _broadcast_alert(data: dict) -> None:
             'detection_method': data.get('detection_method', ''),
             'reason': data.get('reason', ''),
             'fraud_probability': data.get('fraud_probability', 0),
+            'risk_score': data.get('risk_score', 0),
+            'device_id': data.get('device_id', ''),
+            'ip_address': data.get('ip_address', ''),
             'timestamp': data.get('timestamp', ''),
         }
     }
-    for ws in websocket_clients[:]:
-        try:
-            asyncio.run_coroutine_threadsafe(ws.send_json(payload), _ws_loop)
-        except Exception:
+
+
+def _broadcast_alert(data: dict) -> None:
+    """Send fraud alert to all connected WebSocket and SSE clients."""
+    payload = _build_alert_payload(data)
+
+    # WebSocket broadcast
+    if websocket_clients and _ws_loop is not None:
+        for ws in websocket_clients[:]:
             try:
-                websocket_clients.remove(ws)
-            except ValueError:
+                asyncio.run_coroutine_threadsafe(ws.send_json(payload), _ws_loop)
+            except Exception:
+                try:
+                    websocket_clients.remove(ws)
+                except ValueError:
+                    pass
+
+    # SSE broadcast
+    with _sse_lock:
+        for q in sse_subscribers[:]:
+            try:
+                q.put_nowait(payload)
+            except asyncio.QueueFull:
                 pass
 
 
@@ -98,8 +120,11 @@ def consume_transactions() -> None:
                 name_dest=data.get('nameDest', ''),
                 old_balance_dest=data.get('oldbalanceDest', 0),
                 new_balance_dest=data.get('newbalanceDest', 0),
+                device_id=data.get('device_id', ''),
+                ip_address=data.get('ip_address', ''),
                 is_fraud=is_fraud,
                 fraud_probability=data.get('fraud_probability', 0.0),
+                risk_score=data.get('risk_score', 0.0),
                 detection_method=data.get('detection_method', 'none'),
                 created_at=datetime.fromisoformat(data['timestamp']) if data.get('timestamp') else datetime.utcnow(),
             )
@@ -111,7 +136,7 @@ def consume_transactions() -> None:
                     transaction_id=txn_id,
                     alert_type=data.get('detection_method', 'unknown'),
                     reason=data.get('reason', ''),
-                    risk_score=data.get('fraud_probability', 0.0),
+                    risk_score=data.get('risk_score', 0.0),
                 )
                 db.add(alert)
                 _broadcast_alert(data)
